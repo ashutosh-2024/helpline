@@ -17,7 +17,9 @@ No backend, no API keys, no cost.
 
 | Piece | Source |
 |---|---|
-| Places | [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) (OpenStreetMap data), with 3 public servers tried in turn |
+| Places | [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) (OpenStreetMap data): 3 public servers asked in parallel, first answer wins |
+| Backup places | [Nominatim](https://nominatim.org/), used automatically when the Overpass servers are busy (they often are) |
+| Last resort | Google Maps search buttons for the same area, always shown |
 | Typed-place search | [Nominatim](https://nominatim.org/) |
 | Map | [Leaflet](https://leafletjs.com/) 1.9.4 + OSM tiles |
 | Directions | `https://www.google.com/maps/dir/?api=1&destination=lat,lng` |

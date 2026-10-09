@@ -10,16 +10,24 @@ const CATEGORIES = {
   blood:    { label: 'Blood banks', icon: '🩸', color: '#9f1239' },
 };
 
-// Public Overpass servers, tried in order. Any one can be slow or down.
+// Public Overpass servers, queried in parallel; the first good answer wins. They are often overloaded,
+// so if all fail we fall back to Nominatim, and Google Maps search links are always shown as a last resort.
 const OVERPASS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
+const OVERPASS_TIMEOUT_MS = 8000;
+
+// Nominatim fallback: one request per category, spaced out to respect its 1 request/second policy.
+const NOMINATIM_AMENITIES = ['hospital', 'clinic', 'pharmacy', 'police', 'fire_station', 'blood_bank'];
+const NOMINATIM_GAP_MS = 1100;
 
 // Widen the search until we find at least a few hospitals.
 const RADII = [3000, 8000, 20000];
 const MIN_HOSPITALS = 3;
+
+const GMAPS_SEARCHES = [['hospital', '🏥 Hospitals'], ['pharmacy', '💊 Pharmacies'], ['police station', '🚓 Police'], ['fire station', '🚒 Fire'], ['blood bank', '🩸 Blood banks']];
 const MAX_LIST = 60;
 const CACHE_KEY = 'nhn:last';
 
@@ -48,6 +56,7 @@ const els = {
   sosCall: $('sosCall'), sosNum: $('sosNum'), quickNums: $('quickNums'),
   findBtn: $('findBtn'), placeForm: $('placeForm'), placeInput: $('placeInput'),
   status: $('status'), filters: $('filters'), map: $('map'), results: $('results'),
+  gmaps: $('gmaps'), gmapsLinks: $('gmapsLinks'),
 };
 
 const state = { origin: null, places: [], filter: 'all', map: null, layer: null, markers: new Map() };
@@ -100,32 +109,76 @@ async function geocode(query) {
 
 function buildQuery(lat, lon, radius) {
   const near = `(around:${radius},${lat},${lon})`;
-  return `[out:json][timeout:25];(
+  return `[out:json][timeout:10];(
 nwr["amenity"~"^(hospital|clinic|pharmacy|police|fire_station|blood_bank)$"]${near};
 nwr["healthcare"~"^(hospital|blood_donation|blood_bank)$"]${near};
 );out center tags;`;
 }
 
+// Ask every server at once and take the first good answer; cancel the rest.
 async function overpass(query) {
-  let lastErr;
-  for (const endpoint of OVERPASS) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), OVERPASS_TIMEOUT_MS);
+  const ask = async (endpoint) => {
+    const res = await fetch(endpoint, { method: 'POST', body: new URLSearchParams({ data: query }), signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    // A server that ran out of time answers 200 with a "remark" and no data.
+    if (json.remark && !json.elements?.length) throw new Error(json.remark);
+    return json.elements || [];
+  };
+  try {
+    return await Promise.any(OVERPASS.map(ask));
+  } catch {
+    throw new Error('map servers busy');
+  } finally {
+    clearTimeout(timer);
+    ctrl.abort();
+  }
+}
+
+// ---------- Nominatim (fallback) ----------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Turn a Nominatim result into the same shape as an Overpass element so toPlaces() handles both.
+function fromNominatim(r) {
+  const a = r.address || {};
+  return {
+    type: r.osm_type, id: r.osm_id, lat: +r.lat, lon: +r.lon,
+    tags: {
+      ...(r.extratags || {}),
+      amenity: r.category === 'amenity' ? r.type : undefined,
+      name: r.name,
+      'addr:housenumber': a.house_number,
+      'addr:street': a.road,
+      'addr:suburb': a.suburb || a.neighbourhood,
+      'addr:city': a.city || a.town || a.village,
+    },
+  };
+}
+
+async function nominatimNearby(origin, radiusM, onProgress) {
+  const dLat = radiusM / 111320;
+  const dLon = dLat / Math.cos(origin.lat * Math.PI / 180);
+  const viewbox = [origin.lon - dLon, origin.lat + dLat, origin.lon + dLon, origin.lat - dLat].map((n) => n.toFixed(5)).join(',');
+  const elements = [];
+  let ok = 0;
+  for (const [i, amenity] of NOMINATIM_AMENITIES.entries()) {
+    if (i) await sleep(NOMINATIM_GAP_MS);
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        body: new URLSearchParams({ data: query }),
-        signal: ctrl.signal,
-      });
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&amenity=${amenity}&viewbox=${viewbox}&bounded=1&limit=40&extratags=1&addressdetails=1`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()).elements || [];
-    } catch (err) {
-      lastErr = err;
-    } finally {
-      clearTimeout(timer);
+      elements.push(...(await res.json()).map(fromNominatim));
+      ok++;
+      onProgress(toPlaces(elements, origin));
+    } catch {
+      // Skip this category; others may still work.
     }
   }
-  throw lastErr || new Error('All map servers failed');
+  if (!ok) throw new Error('backup server unreachable');
+  return toPlaces(elements, origin);
 }
 
 function categorize(t) {
@@ -188,27 +241,61 @@ function toPlaces(elements, origin) {
 
 // ---------- Search ----------
 
+const hospitalCount = (places) => places.filter((p) => p.cat === 'hospital').length;
+
+async function searchOverpass(origin, where) {
+  let places = [];
+  for (const radius of RADII) {
+    setStatus(`Searching within ${radius / 1000} km${where}…`);
+    try {
+      places = toPlaces(await overpass(buildQuery(origin.lat, origin.lon, radius)), origin);
+    } catch (err) {
+      if (places.length) break; // keep what a smaller radius already found
+      throw err;
+    }
+    if (hospitalCount(places) >= MIN_HOSPITALS) break;
+  }
+  return places;
+}
+
+async function searchNominatim(origin, where) {
+  setStatus(`Main map server is busy. Using the backup server${where}…`);
+  let places = await nominatimNearby(origin, 6000, show);
+  if (hospitalCount(places) < MIN_HOSPITALS) {
+    setStatus(`Few results close by. Searching wider${where}…`);
+    await sleep(NOMINATIM_GAP_MS);
+    try {
+      places = await nominatimNearby(origin, 20000, show);
+    } catch {
+      // keep the closer results
+    }
+  }
+  return places;
+}
+
 async function searchAround(origin, label) {
   state.origin = origin;
+  renderGmaps();
   els.findBtn.disabled = true;
-  let places = [];
+  const where = label ? ` of <b>${escapeHtml(label)}</b>` : '';
   try {
-    for (const radius of RADII) {
-      setStatus(`Searching within ${radius / 1000} km${label ? ` of <b>${escapeHtml(label)}</b>` : ''}…`);
-      places = toPlaces(await overpass(buildQuery(origin.lat, origin.lon, radius)), origin);
-      if (places.filter((p) => p.cat === 'hospital').length >= MIN_HOSPITALS) break;
+    let places;
+    try {
+      places = await searchOverpass(origin, where);
+    } catch {
+      places = await searchNominatim(origin, where);
     }
     saveCache({ origin, label, places, ts: Date.now() });
-    setStatus(places.length ? '' : 'Nothing found nearby on the map. Call the emergency number above.', places.length ? 'info' : 'warn');
+    setStatus(places.length ? '' : 'Nothing found nearby on the map. Call the emergency number above, or try Google Maps below.', places.length ? 'info' : 'warn');
     show(places);
-  } catch (err) {
+  } catch {
     const cached = loadCache();
-    if (cached) {
-      setStatus(`Couldn't reach the map servers. Showing results saved ${ago(cached.ts)}${cached.label ? ` for ${escapeHtml(cached.label)}` : ''}.`, 'warn');
+    if (cached?.places?.length) {
+      setStatus(`Couldn't reach the map servers. Showing results saved ${ago(cached.ts)}${cached.label ? ` for ${escapeHtml(cached.label)}` : ''}. Or use Google Maps below.`, 'warn');
       state.origin = cached.origin;
       show(cached.places);
     } else {
-      setStatus(`Couldn't reach the map servers (${escapeHtml(err.message)}). Check your connection, or call the emergency number above.`, 'error');
+      setStatus('Couldn\'t reach the map servers. Use the Google Maps buttons below, or call the emergency number above.', 'error');
     }
   } finally {
     els.findBtn.disabled = false;
@@ -267,6 +354,15 @@ function fmtDist(m) {
 
 function directionsUrl(p) {
   return `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}`;
+}
+
+// Always-available last resort: let Google Maps do the search around the same point.
+function renderGmaps() {
+  const { lat, lon } = state.origin;
+  els.gmapsLinks.innerHTML = GMAPS_SEARCHES
+    .map(([q, label]) => `<a class="chip-call" href="https://www.google.com/maps/search/${encodeURIComponent(q)}/@${lat},${lon},14z" target="_blank" rel="noopener">${label}</a>`)
+    .join('');
+  els.gmaps.hidden = false;
 }
 
 function show(places) {
@@ -386,6 +482,7 @@ renderNumbers();
 const cached = loadCache();
 if (cached?.places?.length) {
   state.origin = cached.origin;
+  renderGmaps();
   setStatus(`Showing results saved ${ago(cached.ts)}${cached.label ? ` for ${escapeHtml(cached.label)}` : ''}. Tap <b>Find help near me</b> to refresh.`);
   show(cached.places);
 }

@@ -164,6 +164,12 @@ a { color: var(--blue); }
 .btn.disabled { flex: 1; color: var(--muted); cursor: default; font-weight: 500; }
 .btn.ghost { padding: 0 12px; }
 
+/* ---------- Google Maps fallback ---------- */
+
+.gmaps { margin: 8px 0 16px; }
+.gmaps p { margin: 0 0 8px; }
+.gmaps-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* ---------- Footer ---------- */
 
 .foot { max-width: 640px; margin: 0 auto; padding: 0 16px 24px; text-align: center; }
