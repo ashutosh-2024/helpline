@@ -9,7 +9,7 @@ No backend, no API keys, no cost.
 - **One tap**: uses your phone's GPS. If location is blocked or unavailable, type an area, city or landmark instead.
 - **Emergency number always on top**: a big **Call 112** button, adjusted to the local number by time zone (India 112, plus quick-dial 108 / 100 / 101 / 1091 / 1098; US 911; UK 999; Australia 000).
 - **Widens the search automatically**: 3 km → 8 km → 20 km until at least 3 hospitals are found.
-- **Filters** by category, a **map** (Leaflet + OpenStreetMap tiles), and badges for **Emergency** departments and **24/7** places.
+- **Filters** by category, plus **📞 Has phone** and **🕐 Open 24/7** toggles that combine with it (e.g. Pharmacies + 24/7 = 24x7 pharmacies), a **map** (Leaflet + OpenStreetMap tiles), and badges for **Emergency** departments and **24/7** places.
 - **Call** uses the phone number from OpenStreetMap when there is one. **Directions** opens Google Maps navigation.
 - **Works offline** once loaded: the app shell is cached, and the last results are saved on the phone and shown if you have no signal.
 

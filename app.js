@@ -27,7 +27,7 @@ const NOMINATIM_GAP_MS = 1100;
 const RADII = [3000, 8000, 20000];
 const MIN_HOSPITALS = 3;
 
-const GMAPS_SEARCHES = [['hospital', '🏥 Hospitals'], ['pharmacy', '💊 Pharmacies'], ['police station', '🚓 Police'], ['fire station', '🚒 Fire'], ['blood bank', '🩸 Blood banks']];
+const GMAPS_SEARCHES = [['hospital', '🏥 Hospitals'], ['pharmacy', '💊 Pharmacies'], ['24 hour pharmacy', '🕐 24/7 pharmacies'], ['police station', '🚓 Police'], ['fire station', '🚒 Fire'], ['blood bank', '🩸 Blood banks']];
 const MAX_LIST = 60;
 const CACHE_KEY = 'nhn:last';
 
@@ -56,10 +56,10 @@ const els = {
   sosCall: $('sosCall'), sosNum: $('sosNum'), quickNums: $('quickNums'),
   findBtn: $('findBtn'), placeForm: $('placeForm'), placeInput: $('placeInput'),
   status: $('status'), filters: $('filters'), map: $('map'), results: $('results'),
-  gmaps: $('gmaps'), gmapsLinks: $('gmapsLinks'),
+  gmaps: $('gmaps'), gmapsLinks: $('gmapsLinks'), toggles: $('toggles'),
 };
 
-const state = { origin: null, places: [], filter: 'all', map: null, layer: null, markers: new Map() };
+const state = { origin: null, places: [], filter: 'all', onlyPhone: false, only247: false, map: null, layer: null, markers: new Map() };
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -204,6 +204,13 @@ function address(t) {
   return [street, t['addr:suburb'] || t['addr:neighbourhood'], t['addr:city']].filter(Boolean).join(', ');
 }
 
+// OSM writes "always open" several ways: 24/7, Mo-Su 00:00-24:00, 00:00-24:00, ...
+function isOpen247(hours) {
+  if (!hours) return false;
+  const h = hours.toLowerCase().replace(/\s+/g, ' ').trim();
+  return h === '24/7' || /^((mo-su|mon-sun|daily) ?)?00:00 ?- ?(24:00|23:59)$/.test(h);
+}
+
 function distanceM(a, b) {
   const R = 6371000, rad = Math.PI / 180;
   const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
@@ -232,7 +239,7 @@ function toPlaces(elements, origin) {
       dist: distanceM(origin, { lat, lon }),
       phone: firstPhone(t),
       addr: address(t),
-      open247: t.opening_hours === '24/7',
+      open247: isOpen247(t.opening_hours),
       emergency: t.emergency === 'yes',
     });
   }
@@ -372,25 +379,46 @@ function show(places) {
   renderMap();
 }
 
+const inCategory = (p) => state.filter === 'all' || p.cat === state.filter;
+const passesToggles = (p, skip) =>
+  (skip === 'phone' || !state.onlyPhone || p.phone) && (skip === '247' || !state.only247 || p.open247);
+
 function renderFilters() {
-  const counts = { all: state.places.length };
-  for (const p of state.places) counts[p.cat] = (counts[p.cat] || 0) + 1;
+  const present = new Set(state.places.map((p) => p.cat));
+  if (state.filter !== 'all' && !present.has(state.filter)) state.filter = 'all';
+
+  // Category counts respect the toggles; toggle counts respect the category (and the other toggle).
+  const counts = { all: 0 };
+  for (const p of state.places) if (passesToggles(p)) { counts.all++; counts[p.cat] = (counts[p.cat] || 0) + 1; }
   const tabs = [['all', 'All', '']].concat(Object.entries(CATEGORIES).map(([k, c]) => [k, c.label, c.icon]));
   els.filters.innerHTML = tabs
-    .filter(([k]) => k === 'all' || counts[k])
+    .filter(([k]) => k === 'all' || present.has(k))
     .map(([k, label, icon]) =>
       `<button role="tab" data-cat="${k}" aria-selected="${state.filter === k}">${icon} ${label} <span>${counts[k] || 0}</span></button>`)
     .join('');
-  els.filters.hidden = state.places.length === 0;
-  if (state.filter !== 'all' && !counts[state.filter]) state.filter = 'all';
+
+  const phoneCount = state.places.filter((p) => inCategory(p) && p.phone && passesToggles(p, 'phone')).length;
+  const openCount = state.places.filter((p) => inCategory(p) && p.open247 && passesToggles(p, '247')).length;
+  els.toggles.innerHTML = `
+    <button type="button" data-toggle="onlyPhone" aria-pressed="${state.onlyPhone}">📞 Has phone <span>${phoneCount}</span></button>
+    <button type="button" data-toggle="only247" aria-pressed="${state.only247}">🕐 Open 24/7 <span>${openCount}</span></button>`;
+
+  els.filters.hidden = els.toggles.hidden = state.places.length === 0;
 }
 
 function visible() {
-  return state.places.filter((p) => state.filter === 'all' || p.cat === state.filter).slice(0, MAX_LIST);
+  return state.places.filter((p) => inCategory(p) && passesToggles(p)).slice(0, MAX_LIST);
 }
 
 function renderList() {
-  els.results.innerHTML = visible().map((p) => {
+  const shown = visible();
+  if (!shown.length && state.places.length) {
+    const what = [state.only247 && 'open 24/7', state.onlyPhone && 'with a phone number'].filter(Boolean).join(' and ');
+    const cat = state.filter === 'all' ? 'places' : CATEGORIES[state.filter].label.toLowerCase();
+    els.results.innerHTML = `<li class="empty muted">No ${cat} ${what} found on the map nearby. Turn a filter off, or try Google Maps below. Many places don't list their hours or number on OpenStreetMap.</li>`;
+    return;
+  }
+  els.results.innerHTML = shown.map((p) => {
     const c = CATEGORIES[p.cat];
     const badges = [
       p.kind && `<span class="badge">${p.kind}</span>`,
@@ -459,6 +487,15 @@ els.filters.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-cat]');
   if (!btn) return;
   state.filter = btn.dataset.cat;
+  renderFilters();
+  renderList();
+  renderMap();
+});
+
+els.toggles.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-toggle]');
+  if (!btn) return;
+  state[btn.dataset.toggle] = !state[btn.dataset.toggle];
   renderFilters();
   renderList();
   renderMap();

@@ -1,6 +1,6 @@
 // Cache the app shell (and Leaflet) so the app opens with no/poor signal and can show saved results.
 // Bump VERSION whenever any of the files below change.
-const VERSION = 'nhn-v2';
+const VERSION = 'nhn-v3';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'icon.svg', 'manifest.webmanifest'];
 const LEAFLET = 'https://unpkg.com/leaflet@1.9.4/';
 

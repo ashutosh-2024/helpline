@@ -122,6 +122,12 @@ a { color: var(--blue); }
 }
 .filters button[aria-selected="true"] span { color: inherit; opacity: .7; }
 
+.toggles { margin-top: -6px; }
+.toggles button[aria-pressed="true"] {
+  background: var(--green); color: #fff; border-color: var(--green);
+}
+.toggles button[aria-pressed="true"] span { color: inherit; opacity: .8; }
+
 /* ---------- Map ---------- */
 
 .map {
@@ -169,6 +175,8 @@ a { color: var(--blue); }
 .gmaps { margin: 8px 0 16px; }
 .gmaps p { margin: 0 0 8px; }
 .gmaps-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.empty { padding: 16px; text-align: center; border: 1px dashed var(--border); border-radius: 12px; list-style: none; }
 
 /* ---------- Footer ---------- */
 
