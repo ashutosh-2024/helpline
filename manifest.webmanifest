@@ -1,0 +1,15 @@
+{
+  "name": "Nearest Help Now",
+  "short_name": "Help Now",
+  "description": "One tap to find the nearest hospitals, pharmacies, police, fire stations and blood banks.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#b91c1c",
+  "theme_color": "#b91c1c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

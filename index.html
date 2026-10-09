@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#b91c1c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Help Now">
+  <meta name="description" content="One tap to find the nearest hospitals, pharmacies, police, fire stations and blood banks.">
+  <title>Nearest Help Now</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>Help Now</h1>
+    <a id="sosCall" class="sos" href="tel:112">📞 Call <span id="sosNum">112</span></a>
+  </header>
+
+  <nav id="quickNums" class="quick" aria-label="Emergency numbers"></nav>
+
+  <main>
+    <section class="card start">
+      <button id="findBtn" class="find" type="button">📍 Find help near me</button>
+      <form id="placeForm" class="place" autocomplete="off">
+        <input id="placeInput" placeholder="Or type an area, city or landmark" aria-label="Area, city or landmark">
+        <button class="secondary" type="submit">Search</button>
+      </form>
+      <p class="muted small">Your location is only used to search nearby. It isn't stored anywhere except this phone.</p>
+    </section>
+
+    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+
+    <div id="filters" class="filters" role="tablist" hidden></div>
+
+    <div id="map" class="map" hidden></div>
+
+    <ul id="results" class="results"></ul>
+  </main>
+
+  <footer class="foot muted small">
+    In a life-threatening emergency, <strong>call first</strong>, then search.
+    Places come from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+    and may be incomplete or out of date.
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
