@@ -36,11 +36,10 @@ python3 -m http.server 8766
 Location only works over **HTTPS** (or localhost):
 
 ```sh
-gh repo create helpline --public --source=. --push
-gh api repos/{owner}/helpline/pages -X POST -f "source[branch]=main" -f "source[path]=/"
+gh api repos/ashutosh-2024/helpline/pages -X POST -f "source[branch]=main" -f "source[path]=/"
 ```
 
-Then open `https://<you>.github.io/helpline/` on your phone and choose **Add to Home screen**.
+Then open `https://ashutosh-2024.github.io/helpline/` on your phone and choose **Add to Home screen**.
 
 ## Files
 
