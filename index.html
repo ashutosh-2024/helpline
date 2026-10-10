@@ -3,56 +3,88 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#b91c1c">
+  <meta name="theme-color" content="#c81e2a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Help Now">
   <meta name="description" content="One tap to find the nearest hospitals, pharmacies, police, fire stations and blood banks.">
   <title>Nearest Help Now</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="bar">
-    <h1>Help Now</h1>
-    <a id="sosCall" class="sos" href="tel:112">📞 Call <span id="sosNum">112</span></a>
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 2.5c-4.1 0-7.5 3.2-7.5 7.3 0 5.5 7.5 12.7 7.5 12.7s7.5-7.2 7.5-12.7c0-4.1-3.4-7.3-7.5-7.3z" fill="#fff"/><path d="M10.9 6.3h2.2v2.6h2.6v2.2h-2.6v2.6h-2.2v-2.6H8.3V8.9h2.6z" fill="#c81e2a"/></svg>
+      </span>
+      <span class="brand-text"><b>Help Now</b><small>Emergency help nearby</small></span>
+    </div>
+    <a id="sosCall" class="sos" href="tel:112" aria-label="Call emergency number">
+      <span class="sos-ring" aria-hidden="true"></span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+      <span>Call <b id="sosNum">112</b></span>
+    </a>
   </header>
 
-  <nav id="quickNums" class="quick" aria-label="Emergency numbers"></nav>
+  <section class="hero">
+    <div class="hero-inner">
+      <h2>Find help,<br><span>right now.</span></h2>
+      <p>The nearest hospitals, pharmacies, police, fire stations and blood banks in one tap.</p>
+      <nav id="quickNums" class="quick" aria-label="Emergency numbers"></nav>
+    </div>
+  </section>
 
   <main>
-    <section class="card start">
-      <button id="findBtn" class="find" type="button">📍 Find help near me</button>
+    <section class="start">
+      <button id="findBtn" class="find" type="button">
+        <span class="find-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="8"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg>
+        </span>
+        <span class="find-text"><b>Find help near me</b><small>Uses your phone's location</small></span>
+        <span class="find-arrow" aria-hidden="true">→</span>
+      </button>
+
+      <div class="or"><span>or search a place</span></div>
+
       <form id="placeForm" class="place" autocomplete="off">
-        <input id="placeInput" placeholder="Or type an area, city or landmark" aria-label="Area, city or landmark">
-        <button class="secondary" type="submit">Search</button>
+        <svg class="place-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+        <input id="placeInput" placeholder="Area, city or landmark" aria-label="Area, city or landmark" enterkeyhint="search">
+        <button type="submit">Search</button>
       </form>
-      <p class="muted small">Your location is only used to search nearby. It isn't stored anywhere except this phone.</p>
+      <p class="privacy">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Your location stays on this phone and is only used to search nearby.
+      </p>
     </section>
 
     <div id="status" class="status" role="status" aria-live="polite" hidden></div>
 
     <div id="filters" class="filters" role="tablist" hidden></div>
-    <div id="toggles" class="filters toggles" hidden></div>
+    <div id="toggles" class="toggles" hidden></div>
 
     <div id="map" class="map" hidden></div>
 
     <ul id="results" class="results"></ul>
 
     <section id="gmaps" class="gmaps" hidden>
-      <p class="muted small">Not finding what you need? Search the same area in Google Maps:</p>
+      <h3>Search Google Maps instead</h3>
+      <p>Not finding what you need? Open the same area in Google Maps.</p>
       <div id="gmapsLinks" class="gmaps-links"></div>
     </section>
   </main>
 
-  <footer class="foot muted small">
-    In a life-threatening emergency, <strong>call first</strong>, then search.
-    Places come from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
-    and may be incomplete or out of date.
+  <footer class="foot">
+    <p class="foot-alert">In a life-threatening emergency, <strong>call first</strong>, then search.</p>
+    <p>Places from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors. They may be incomplete or out of date.</p>
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"

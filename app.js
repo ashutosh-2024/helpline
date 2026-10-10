@@ -49,6 +49,16 @@ function detectCountry() {
   return 'DEFAULT';
 }
 
+// Line icons (Feather-style) for buttons.
+const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  phone: svg('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>'),
+  nav: svg('<path d="M3 11 22 2l-9 19-2-8-8-2z"/>'),
+  map: svg('<path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16M16 6v16"/>'),
+  out: svg('<path d="M7 17 17 7M8 7h9v9"/>'),
+};
+const NUM_ICONS = { Ambulance: '🚑', Police: '🚓', Fire: '🚒', Women: '🛡️', Child: '🧒', Poison: '☠️', 'NHS 111': '🩺' };
+
 // ---------- DOM ----------
 
 const $ = (id) => document.getElementById(id);
@@ -68,7 +78,7 @@ function escapeHtml(s) {
 function setStatus(msg, kind = 'info') {
   els.status.hidden = !msg;
   els.status.className = `status ${kind}`;
-  els.status.innerHTML = msg || '';
+  els.status.innerHTML = msg ? `<span>${msg}</span>` : '';
 }
 
 // ---------- Emergency numbers ----------
@@ -78,7 +88,7 @@ function renderNumbers() {
   els.sosCall.href = `tel:${n.main}`;
   els.sosNum.textContent = n.main;
   els.quickNums.innerHTML = n.more
-    .map(([label, num]) => `<a class="chip-call" href="tel:${num}">${escapeHtml(label)} <b>${num}</b></a>`)
+    .map(([label, num]) => `<a class="qnum" href="tel:${num}"><span class="qnum-ic">${NUM_ICONS[label] || '📞'}</span><span><small>${escapeHtml(label)}</small><b>${num}</b></span></a>`)
     .join('');
   els.quickNums.hidden = n.more.length === 0;
 }
@@ -253,7 +263,7 @@ const hospitalCount = (places) => places.filter((p) => p.cat === 'hospital').len
 async function searchOverpass(origin, where) {
   let places = [];
   for (const radius of RADII) {
-    setStatus(`Searching within ${radius / 1000} km${where}…`);
+    setStatus(`Searching within ${radius / 1000} km${where}…`, 'loading');
     try {
       places = toPlaces(await overpass(buildQuery(origin.lat, origin.lon, radius)), origin);
     } catch (err) {
@@ -266,10 +276,10 @@ async function searchOverpass(origin, where) {
 }
 
 async function searchNominatim(origin, where) {
-  setStatus(`Main map server is busy. Using the backup server${where}…`);
+  setStatus(`Main map server is busy. Using the backup server${where}…`, 'loading');
   let places = await nominatimNearby(origin, 6000, show);
   if (hospitalCount(places) < MIN_HOSPITALS) {
-    setStatus(`Few results close by. Searching wider${where}…`);
+    setStatus(`Few results close by. Searching wider${where}…`, 'loading');
     await sleep(NOMINATIM_GAP_MS);
     try {
       places = await nominatimNearby(origin, 20000, show);
@@ -285,6 +295,7 @@ async function searchAround(origin, label) {
   renderGmaps();
   els.findBtn.disabled = true;
   const where = label ? ` of <b>${escapeHtml(label)}</b>` : '';
+  if (!state.places.length) els.results.innerHTML = '<li class="skeleton"><i></i><i></i><i></i></li>'.repeat(3);
   try {
     let places;
     try {
@@ -310,7 +321,7 @@ async function searchAround(origin, label) {
 }
 
 async function findNearMe() {
-  setStatus('Getting your location…');
+  setStatus('Getting your location…', 'loading');
   try {
     const pos = await getPosition();
     await searchAround(pos, null);
@@ -327,7 +338,7 @@ async function findByPlace(e) {
   e.preventDefault();
   const q = els.placeInput.value.trim();
   if (!q) return els.placeInput.focus();
-  setStatus(`Looking up <b>${escapeHtml(q)}</b>…`);
+  setStatus(`Looking up <b>${escapeHtml(q)}</b>…`, 'loading');
   try {
     const hit = await geocode(q);
     if (!hit) return setStatus(`Couldn't find "${escapeHtml(q)}". Try a bigger nearby place or city.`, 'warn');
@@ -367,7 +378,7 @@ function directionsUrl(p) {
 function renderGmaps() {
   const { lat, lon } = state.origin;
   els.gmapsLinks.innerHTML = GMAPS_SEARCHES
-    .map(([q, label]) => `<a class="chip-call" href="https://www.google.com/maps/search/${encodeURIComponent(q)}/@${lat},${lon},14z" target="_blank" rel="noopener">${label}</a>`)
+    .map(([q, label]) => `<a class="gchip" href="https://www.google.com/maps/search/${encodeURIComponent(q)}/@${lat},${lon},14z" target="_blank" rel="noopener">${label}${ICON.out}</a>`)
     .join('');
   els.gmaps.hidden = false;
 }
@@ -390,18 +401,18 @@ function renderFilters() {
   // Category counts respect the toggles; toggle counts respect the category (and the other toggle).
   const counts = { all: 0 };
   for (const p of state.places) if (passesToggles(p)) { counts.all++; counts[p.cat] = (counts[p.cat] || 0) + 1; }
-  const tabs = [['all', 'All', '']].concat(Object.entries(CATEGORIES).map(([k, c]) => [k, c.label, c.icon]));
+  const tabs = [['all', 'All', '', '']].concat(Object.entries(CATEGORIES).map(([k, c]) => [k, c.label, c.icon, c.color]));
   els.filters.innerHTML = tabs
     .filter(([k]) => k === 'all' || present.has(k))
-    .map(([k, label, icon]) =>
-      `<button role="tab" data-cat="${k}" aria-selected="${state.filter === k}">${icon} ${label} <span>${counts[k] || 0}</span></button>`)
+    .map(([k, label, icon, color]) =>
+      `<button role="tab" data-cat="${k}" aria-selected="${state.filter === k}"${color ? ` style="--cat:${color}"` : ''}>${icon} ${label} <span>${counts[k] || 0}</span></button>`)
     .join('');
 
   const phoneCount = state.places.filter((p) => inCategory(p) && p.phone && passesToggles(p, 'phone')).length;
   const openCount = state.places.filter((p) => inCategory(p) && p.open247 && passesToggles(p, '247')).length;
   els.toggles.innerHTML = `
-    <button type="button" data-toggle="onlyPhone" aria-pressed="${state.onlyPhone}">📞 Has phone <span>${phoneCount}</span></button>
-    <button type="button" data-toggle="only247" aria-pressed="${state.only247}">🕐 Open 24/7 <span>${openCount}</span></button>`;
+    <button type="button" data-toggle="onlyPhone" aria-pressed="${state.onlyPhone}"><i class="sw"></i>Has phone <span>${phoneCount}</span></button>
+    <button type="button" data-toggle="only247" aria-pressed="${state.only247}"><i class="sw"></i>Open 24/7 <span>${openCount}</span></button>`;
 
   els.filters.hidden = els.toggles.hidden = state.places.length === 0;
 }
@@ -415,31 +426,33 @@ function renderList() {
   if (!shown.length && state.places.length) {
     const what = [state.only247 && 'open 24/7', state.onlyPhone && 'with a phone number'].filter(Boolean).join(' and ');
     const cat = state.filter === 'all' ? 'places' : CATEGORIES[state.filter].label.toLowerCase();
-    els.results.innerHTML = `<li class="empty muted">No ${cat} ${what} found on the map nearby. Turn a filter off, or try Google Maps below. Many places don't list their hours or number on OpenStreetMap.</li>`;
+    els.results.innerHTML = `<li class="empty"><b>No ${cat} ${what} nearby</b>Turn a filter off, or try Google Maps below. Many places don't list their hours or number on OpenStreetMap.</li>`;
     return;
   }
-  els.results.innerHTML = shown.map((p) => {
+  els.results.innerHTML = shown.map((p, i) => {
     const c = CATEGORIES[p.cat];
+    const [num, unit] = fmtDist(p.dist).split(' ');
     const badges = [
       p.kind && `<span class="badge">${p.kind}</span>`,
-      p.emergency && '<span class="badge red">Emergency</span>',
-      p.open247 && '<span class="badge green">24/7</span>',
+      p.emergency && '<span class="badge red">● Emergency</span>',
+      p.open247 && '<span class="badge green">● Open 24/7</span>',
     ].filter(Boolean).join('');
-    return `<li class="place-card" data-id="${p.id}" style="--cat:${c.color}">
+    return `<li class="place-card" data-id="${p.id}" style="--cat:${c.color};--i:${Math.min(i, 12)}">
       <div class="place-head">
         <span class="place-icon" aria-hidden="true">${c.icon}</span>
         <div class="place-main">
           <h3>${escapeHtml(p.name)}</h3>
-          <p class="muted small">${fmtDist(p.dist)}${p.addr ? ` · ${escapeHtml(p.addr)}` : ''}</p>
-          ${badges ? `<p class="badges">${badges}</p>` : ''}
+          ${p.addr ? `<p class="place-addr">${escapeHtml(p.addr)}</p>` : ''}
+          ${badges ? `<div class="badges">${badges}</div>` : ''}
         </div>
+        <span class="dist"><b>${num}</b><small>${unit} away</small></span>
       </div>
       <div class="place-actions">
         ${p.phone
-          ? `<a class="btn call" href="tel:${p.phone.dial}">📞 Call</a>`
-          : '<span class="btn disabled" title="No phone number on the map">No number</span>'}
-        <a class="btn go" href="${directionsUrl(p)}" target="_blank" rel="noopener">🧭 Directions</a>
-        <button class="btn ghost show-map" type="button" aria-label="Show on map">🗺️</button>
+          ? `<a class="btn call" href="tel:${p.phone.dial}">${ICON.phone}Call</a>`
+          : '<span class="btn disabled" title="No phone number on the map">No number listed</span>'}
+        <a class="btn go" href="${directionsUrl(p)}" target="_blank" rel="noopener">${ICON.nav}Directions</a>
+        <button class="btn ghost show-map" type="button" aria-label="Show on map">${ICON.map}</button>
       </div>
     </li>`;
   }).join('');
@@ -460,13 +473,14 @@ function renderMap() {
   state.markers.clear();
 
   const you = [state.origin.lat, state.origin.lon];
-  L.circleMarker(you, { radius: 9, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 })
+  L.marker(you, { icon: L.divIcon({ className: '', html: '<div class="you"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), zIndexOffset: 1000 })
     .bindPopup('You are here').addTo(state.layer);
 
   const shown = visible();
   for (const p of shown) {
     const c = CATEGORIES[p.cat];
-    const m = L.circleMarker([p.lat, p.lon], { radius: 8, color: '#fff', weight: 2, fillColor: c.color, fillOpacity: 0.95 })
+    const icon = L.divIcon({ className: '', html: `<div class="pin" style="--cat:${c.color}"><span>${c.icon}</span></div>`, iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -32] });
+    const m = L.marker([p.lat, p.lon], { icon })
       .bindPopup(`<b>${escapeHtml(p.name)}</b><br>${fmtDist(p.dist)}<br><a href="${directionsUrl(p)}" target="_blank" rel="noopener">Directions</a>${p.phone ? ` · <a href="tel:${p.phone.dial}">Call</a>` : ''}`)
       .addTo(state.layer);
     state.markers.set(p.id, m);
